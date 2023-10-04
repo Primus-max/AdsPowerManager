@@ -160,58 +160,86 @@ namespace AdsPowerManager
         /// Получает список профилей.
         /// </summary>
         /// <returns>Список профилей.</returns>
-        public async Task<List<Profile>> GetProfiles()
+        public static async Task<List<Profile>> GetProfiles()
         {
-            string apiUrl = "http://local.adspower.com:50325/api/v1/user/list?page_size=100";
-            var httpClient = new HttpClient();
-
-            var response = await httpClient.GetAsync(apiUrl);
-
-            if (!response.IsSuccessStatusCode)
+            try
             {
-                Console.WriteLine($"Failed to get profiles. Status code: {response.StatusCode}");
-                return null;
-            }
+                string apiUrl = "http://local.adspower.com:50325/api/v1/user/list?page_size=100";
+                using var httpClient = new HttpClient();
 
-            var responseString = await response.Content.ReadAsStringAsync();
+                var response = await httpClient.GetAsync(apiUrl);
 
-            JObject responseDataJson = JObject.Parse(responseString);
-
-            int code = (int)responseDataJson["code"];
-            if (code != 0)
-            {
-                string errorMsg = (string)responseDataJson["msg"];
-                Console.WriteLine($"Failed to get profiles: {errorMsg}");
-                return null;
-            }
-
-            var profilesJsonArray = (JArray)responseDataJson["data"]["list"];
-            var profiles = new List<Profile>();
-
-            foreach (JToken profileJson in profilesJsonArray)
-            {
-                Profile profile = new Profile
+                if (!response.IsSuccessStatusCode)
                 {
-                    SerialNumber = (string?)profileJson["serial_number"],
-                    UserId = (string?)profileJson["user_id"],
-                    Name = (string?)profileJson["name"],
-                    GroupId = (string?)profileJson["group_id"],
-                    GroupName = (string?)profileJson["group_name"],
-                    DomainName = (string?)profileJson["domain_name"],
-                    Username = (string?)profileJson["username"],
-                    Remark = (string?)profileJson["remark"],
-                    CreatedTime = DateTimeOffset.FromUnixTimeSeconds((long)profileJson["created_time"]).DateTime,
-                    IP = (string?)profileJson["ip"],
-                    IPCountry = (string?)profileJson["ip_country"],
-                    Password = (string?)profileJson["password"],
-                    LastOpenTime = DateTimeOffset.FromUnixTimeSeconds((long)profileJson["last_open_time"]).DateTime
-                };
+                    Console.WriteLine($"Failed to get profiles. Status code: {response.StatusCode}");
+                    return new List<Profile>();
+                }
 
-                profiles.Add(profile);
+                var responseString = await response.Content.ReadAsStringAsync();
+
+                JObject responseDataJson = JObject.Parse(responseString);
+
+                int code;
+                if (!int.TryParse(responseDataJson["code"]?.ToString(), out code))
+                {
+                    Console.WriteLine("Invalid or missing 'code' in the response.");
+                    return new List<Profile>();
+                }
+
+                if (code != 0)
+                {
+                    string errorMsg = responseDataJson["msg"]?.ToString() ?? "Unknown error";
+                    Console.WriteLine($"Failed to get profiles: {errorMsg}");
+                    return new List<Profile>();
+                }
+
+                var dataToken = responseDataJson["data"];
+                if (dataToken == null)
+                {
+                    Console.WriteLine("Invalid or missing 'data' in the response.");
+                    return new List<Profile>();
+                }
+
+                var profilesJsonArray = dataToken["list"];
+                if (profilesJsonArray == null || !profilesJsonArray.Any())
+                {
+                    Console.WriteLine("Invalid or missing 'list' in the 'data' section of the response.");
+                    return new List<Profile>();
+                }
+
+                var profiles = new List<Profile>();
+
+                foreach (JToken profileJson in profilesJsonArray)
+                {
+                    Profile profile = new Profile
+                    {
+                        SerialNumber = (string?)profileJson["serial_number"],
+                        UserId = (string?)profileJson["user_id"],
+                        Name = (string?)profileJson["name"],
+                        GroupId = (string?)profileJson["group_id"],
+                        GroupName = (string?)profileJson["group_name"],
+                        DomainName = (string?)profileJson["domain_name"],
+                        Username = (string?)profileJson["username"],
+                        Remark = (string?)profileJson["remark"],
+                        CreatedTime = DateTimeOffset.FromUnixTimeSeconds((long?)profileJson["created_time"] ?? 0).DateTime,
+                        IP = (string?)profileJson["ip"],
+                        IPCountry = (string?)profileJson["ip_country"],
+                        Password = (string?)profileJson["password"],
+                        LastOpenTime = DateTimeOffset.FromUnixTimeSeconds((long?)profileJson["last_open_time"] ?? 0).DateTime
+                    };
+
+                    profiles.Add(profile);
+                }
+
+                return profiles;
             }
-
-            return profiles;
+            catch (Exception ex)
+            {
+                Console.WriteLine($"An error occurred: {ex.Message}");
+                return new List<Profile>();
+            }
         }
+
     }
 
     /// <summary>
